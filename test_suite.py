@@ -65,14 +65,8 @@ class TestPractical3_SearchAgent(unittest.TestCase):
         start_pos = (0, 0)
         goal_pos = (3, 3)
 
-        # Create a U-shaped wall trap that the agent must navigate around
-        # Grid layout (S=Start, G=Goal, W=Wall):
-        # 3 | . . . G
-        # 2 | W W W .
-        # 1 | . . . .
-        # 0 | S W W .
-        #   ---------
-        #     0 1 2 3
+        # Create a U-shaped wall trap wich is negative allowed
+        
         walls = [(1, 0), (2, 0), (0, 2), (1, 2), (2, 2)]
 
         # Run student's BFS algorithm

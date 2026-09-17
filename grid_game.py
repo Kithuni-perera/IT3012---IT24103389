@@ -5,14 +5,18 @@ import random
 class GridHuntGame:
     """A small Pacman-style grid environment (4x4) where an agent collects food."""
 
-    def __init__(self, width=4, height=4):
-        self.width = width
-        self.height = height
-        self.agent_pos = [0, 0]  # Starting position (x, y)
+    
+#Environment is __init__
+    def __init__(self, width=4, height=4):      # width=4, height=4 - defining Grid dimensions, This is the small, non-visual environment (GridHuntGame) from Lab 01. It's telling Python: "unless someone says otherwise, make this grid 4 columns wide and 4 rows tall." It's a tiny 4×4 board — good for quick console-based testing, not meant to be pretty or fast to visualize.
+        self.width = width    # Width of the grid (number of columns), Without this, width would just be a local variable inside __init__ that disappears once the constructor finishes.
+        self.height = height   # Height of the grid (number of rows)
+        self.agent_pos = [0, 0]  # Agent's starting position (x, y)
 
         # Place a few random food pellets and obstacles (walls)
-        self.food_positions = {[1, 2], [2, 3], [3, 0], [2, 1]}
-        self.walls = {[1, 1], [2, 2]}
+        # Stored as a set of (x, y) tuples so "is my position here?" checks are fast.
+        # (A set cannot hold lists, because lists are changeable / unhashable.)
+        self.food_positions = {(1, 2), (2, 3), (3, 0), (2, 1)}
+        self.walls = {(1, 1), (2, 2)}
 
         self.score = 0
         self.steps = 0
@@ -24,6 +28,8 @@ class GridHuntGame:
             'hit_wall': tuple(self.agent_pos) in self.walls,
             'score': self.score,
             'remaining_food': len(self.food_positions)
+            
+
         }
 
     def execute_action(self, agent, action: str):

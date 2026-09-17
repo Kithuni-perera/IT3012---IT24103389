@@ -2,7 +2,6 @@
 import random
 import tkinter as tk
 
-
 class VisualGridHuntGame:
     """A flexible Pacman-style grid environment with support for configurable opponents and larger scales."""
 
@@ -26,7 +25,25 @@ class VisualGridHuntGame:
             if pos_tuple != (0, 0) and pos_tuple not in self.walls:
                 self.food_positions.add(pos_tuple)
 
-        # Generate adversarial opponents
+        # Q9
+        # Generate toxic trap tiles that penalize the agent on contact.
+        # Kept separate from food/walls so a trap never overlaps either.
+        self.toxic_traps = set()
+
+        while len(self.toxic_traps) < 5:
+            tx = random.randint(0, self.width - 1)
+            ty = random.randint(0, self.height - 1)
+            trap_pos = (tx, ty)
+
+            if (
+                trap_pos != (0, 0)
+                and trap_pos not in self.walls
+                and trap_pos not in self.food_positions
+            ):
+                self.toxic_traps.add(trap_pos)
+
+        # Generate adversarial opponents (stored as mutable lists since their
+        # positions change every step, unlike the static food/wall/trap sets)
         self.opponents = []
         while len(self.opponents) < num_opponents:
             ox = random.randint(0, self.width - 1)
@@ -37,13 +54,15 @@ class VisualGridHuntGame:
 
         self.score = 0
         self.steps = 0
-        self.collision = False
+        self.collision = False  # Set to True once an opponent lands on the agent's tile
 
-    def get_percept(self) -> dict:
+
+    def get_percept(self) -> dict:  #defines what the agent can sense in the environment, including its position, food, walls, and opponents.
         return {
             'agent_pos': list(self.agent_pos),
             'opponent_positions': [list(op) for op in self.opponents],
             'smells_food': tuple(self.agent_pos) in self.food_positions,
+            'smells_toxin': tuple(self.agent_pos) in self.toxic_traps,
             'hit_wall': tuple(self.agent_pos) in self.walls,
             'collision': self.collision,
             'score': self.score,
@@ -54,6 +73,7 @@ class VisualGridHuntGame:
         self.steps += 1
         new_pos = list(self.agent_pos)
 
+        # Move the agent one cell, clamped so it can't leave the grid
         if action == 'Up':
             new_pos[1] = min(self.height - 1, new_pos[1] + 1)
         elif action == 'Down':
@@ -63,16 +83,24 @@ class VisualGridHuntGame:
         elif action == 'Right':
             new_pos[0] = min(self.width - 1, new_pos[0] + 1)
 
+        # Walls block movement entirely and cost points; otherwise commit the move
         if tuple(new_pos) in self.walls:
             self.score -= 5
         else:
             self.agent_pos = new_pos
 
+        # Eating food removes it from the grid and rewards the agent
         tuple_pos = tuple(self.agent_pos)
         if tuple_pos in self.food_positions:
             self.food_positions.remove(tuple_pos)
             self.score += 20
 
+        # Stepping on a toxic trap only penalizes; the trap stays for future steps
+        if tuple_pos in self.toxic_traps:
+            self.score -= 15
+
+        # Move every opponent randomly (or let it stay put), then check for a
+        # collision with the agent, which ends the game with a heavy penalty
         for op in self.opponents:
             move = random.choice(['Up', 'Down', 'Left', 'Right', 'Stay'])
             if move == 'Up' and op[1] < self.height - 1:
@@ -89,6 +117,7 @@ class VisualGridHuntGame:
                 self.collision = True
 
     def is_done(self) -> bool:
+        # Game ends when all food is eaten, the step cap is reached, or the agent is caught
         return len(self.food_positions) == 0 or self.steps >= 60 or self.collision
 
 
@@ -112,9 +141,11 @@ class GridGameGUI:
         self.canvas = tk.Canvas(root, width=canvas_w, height=canvas_h, bg="white")
         self.canvas.pack()
 
+        # Live score/step readout, updated after every simulated step
         self.label = tk.Label(root, text="Score: 0 | Steps: 0", font=("Arial", 14))
         self.label.pack(pady=10)
 
+        # Kicks off the animated simulation loop when clicked
         self.btn = tk.Button(root, text="Start Simulation", command=self.run_loop, font=("Arial", 12), bg="#000066",
                              fg="white")
         self.btn.pack(pady=5)
@@ -122,11 +153,14 @@ class GridGameGUI:
         self.draw_grid()
 
     def draw_grid(self):
+        # Redraw the whole board from scratch each frame (simplest way to keep it in sync with env state)
         self.canvas.delete("all")
 
+        # Draw every grid cell, shading walls differently from open floor
         for x in range(self.env.width):
             for y in range(self.env.height):
                 x1 = x * self.cell_size
+                # Flip the y-axis so (0,0) renders at the bottom-left like a normal coordinate grid
                 y1 = (self.env.height - 1 - y) * self.cell_size
                 x2 = x1 + self.cell_size
                 y2 = y1 + self.cell_size
@@ -139,6 +173,23 @@ class GridGameGUI:
                     self.canvas.create_text(x1 + self.cell_size / 2, y1 + self.cell_size / 2, text="W", fill="white",
                                             font=("Arial", 8, "bold"))
 
+
+        # Draw toxic traps as small purple squares
+        for tx, ty in self.env.toxic_traps:
+                offset = self.cell_size * 0.25
+                x1 = tx * self.cell_size + offset
+                y1 = (self.env.height - 1 - ty) * self.cell_size + offset
+
+                self.canvas.create_rectangle(
+                    x1,
+                    y1,
+                    x1 + self.cell_size * 0.5,
+                    y1 + self.cell_size * 0.5,
+                    fill="purple",
+                    outline="darkviolet"
+    )                               
+
+        # Draw food pellets as small orange circles
         for fx, fy in self.env.food_positions:
             offset = self.cell_size * 0.25
             x1 = fx * self.cell_size + offset
@@ -146,6 +197,7 @@ class GridGameGUI:
             self.canvas.create_oval(x1, y1, x1 + self.cell_size * 0.5, y1 + self.cell_size * 0.5, fill="#f59e0b",
                                     outline="#d97706")
 
+        # Draw opponents as red squares
         for ox, oy in self.env.opponents:
             offset = self.cell_size * 0.2
             x1 = ox * self.cell_size + offset
@@ -153,6 +205,9 @@ class GridGameGUI:
             self.canvas.create_rectangle(x1, y1, x1 + self.cell_size * 0.6, y1 + self.cell_size * 0.6, fill="#990000",
                                          outline="#7a0000")
 
+
+
+        # Draw the agent last (on top) as a blue circle
         ax, ay = self.env.agent_pos
         offset = self.cell_size * 0.15
         x1 = ax * self.cell_size + offset
@@ -161,9 +216,12 @@ class GridGameGUI:
                                 outline="#1e3a8a")
 
     def run_loop(self):
+        # Disable the button so the simulation can't be restarted mid-run
         self.btn.config(state="disabled")
 
         def step():
+            # Recursive step function scheduled via Tk's `after`, giving an animated
+            # frame every 250ms instead of blocking the GUI with a plain while-loop
             if not self.env.is_done():
                 action = random.choice(['Up', 'Down', 'Left', 'Right'])
                 self.env.execute_action(action)
@@ -172,6 +230,7 @@ class GridGameGUI:
                 self.label.config(text=f"Score: {self.env.score} | Steps: {self.env.steps} | Action: {action}")
                 self.root.after(250, step)
             else:
+                # Game over: show whether it ended from a collision or ran to completion
                 end_text = f"Collision! Game Over! Final Score: {self.env.score}" if self.env.collision else f"Finished! Final Score: {self.env.score}"
                 self.label.config(text=end_text)
                 self.btn.config(state="normal")
@@ -180,7 +239,10 @@ class GridGameGUI:
 
 
 if __name__ == "__main__":
+
     root = tk.Tk()
+
+
     # Try a larger grid size like 12x12 with 15 food and 3 opponents!
     app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=0)
     root.mainloop()
